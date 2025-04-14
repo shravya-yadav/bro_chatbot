@@ -5,8 +5,10 @@ import HistoryPanel from '../components/HistoryPanel';
 import './App.css';
 import axios from 'axios';
 
+// Remove trailing slash from backend URL if it exists
+const BASE_URL = import.meta.env.VITE_BACKEND_URL.replace(/\/$/, '');
 
-console.log("Using backend URL:", import.meta.env.VITE_BACKEND_URL);
+console.log("Using backend URL:", BASE_URL);
 
 function App() {
   const [selectedHistory, setSelectedHistory] = useState(null);
@@ -23,7 +25,7 @@ function App() {
   useEffect(() => {
     const fetchHistory = async () => {
       try {
-        const res = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/get_history/user123`);
+        const res = await axios.get(`${BASE_URL}/get_history/user123`);
         const prompts = res.data.map(item => item.prompt);
         setHistory(prompts);
       } catch (err) {

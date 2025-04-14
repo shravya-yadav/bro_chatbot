@@ -4,7 +4,9 @@ import { formatGeminiResponse } from '../src/utils/formatGeminiResponse.jsx';
 import HistoryPanel from './HistoryPanel';
 import './ChatBox.css';
 
-console.log("Using backend URL:", import.meta.env.VITE_BACKEND_URL);
+// Normalize backend URL to avoid double slashes
+const BASE_URL = import.meta.env.VITE_BACKEND_URL.replace(/\/$/, '');
+console.log("Using backend URL:", BASE_URL);
 
 function ChatBox({ selectedHistory }) {
   const [messages, setMessages] = useState([]);
@@ -48,7 +50,7 @@ function ChatBox({ selectedHistory }) {
     setHistory(prev => (prev.includes(prompt) ? prev : [...prev, prompt]));
 
     try {
-      await axios.post(`${import.meta.env.VITE_BACKEND_URL}/save_history`, {
+      await axios.post(`${BASE_URL}/save_history`, {
         user_id: userId,
         query: prompt,
         response: ''
@@ -58,7 +60,7 @@ function ChatBox({ selectedHistory }) {
     }
 
     try {
-      const res = await axios.post(`${import.meta.env.VITE_BACKEND_URL}/chat`, {
+      const res = await axios.post(`${BASE_URL}/chat`, {
         user_id: userId,
         message: finalInput
       });
@@ -76,7 +78,7 @@ function ChatBox({ selectedHistory }) {
     setMessages([]);
     setInput('');
     try {
-      await axios.post(`${import.meta.env.VITE_BACKEND_URL}/start_session/${userId}`);
+      await axios.post(`${BASE_URL}/start_session/${userId}`);
     } catch (err) {
       console.error("Failed to reset session:", err);
     }
@@ -91,7 +93,7 @@ function ChatBox({ selectedHistory }) {
       <div className="chat-container">
         <div className="chat-section">
           <div className="chat-header">
-          <h3>🤖 Chat with <span className="bro-text">BRO</span></h3>
+            <h3>🤖 Chat with <span className="bro-text">BRO</span></h3>
             <button onClick={resetChat}>Clear Chat</button>
           </div>
 
