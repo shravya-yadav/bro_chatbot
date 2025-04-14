@@ -5,6 +5,9 @@ import HistoryPanel from '../components/HistoryPanel';
 import './App.css';
 import axios from 'axios';
 
+
+console.log("Using backend URL:", import.meta.env.VITE_BACKEND_URL);
+
 function App() {
   const [selectedHistory, setSelectedHistory] = useState(null);
   const [history, setHistory] = useState([]);

@@ -4,6 +4,8 @@ import { formatGeminiResponse } from '../src/utils/formatGeminiResponse.jsx';
 import HistoryPanel from './HistoryPanel';
 import './ChatBox.css';
 
+console.log("Using backend URL:", import.meta.env.VITE_BACKEND_URL);
+
 function ChatBox({ selectedHistory }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -48,7 +50,8 @@ function ChatBox({ selectedHistory }) {
     try {
       await axios.post(`${import.meta.env.VITE_BACKEND_URL}/save_history`, {
         user_id: userId,
-        prompt: prompt
+        query: prompt,
+        response: ''
       });
     } catch (err) {
       console.error("Failed to save history:", err);
