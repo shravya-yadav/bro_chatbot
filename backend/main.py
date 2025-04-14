@@ -24,11 +24,6 @@ SERPER_API_KEY = "0da379d2affd1fc587d4a472d84265c5f438a83f"
 
 app = FastAPI()
 
-from fastapi import FastAPI, Request
-from pydantic import BaseModel
-
-app = FastAPI()
-
 # Dummy history store (use DB or file in real project)
 user_histories = {}
 
