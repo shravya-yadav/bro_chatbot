@@ -46,7 +46,7 @@ function ChatBox({ selectedHistory }) {
     setHistory(prev => (prev.includes(prompt) ? prev : [...prev, prompt]));
 
     try {
-      await axios.post('http://localhost:8000/save_history', {
+      await axios.post(`${import.meta.env.VITE_BACKEND_URL}/save_history`, {
         user_id: userId,
         prompt: prompt
       });
@@ -55,7 +55,7 @@ function ChatBox({ selectedHistory }) {
     }
 
     try {
-      const res = await axios.post('http://localhost:8000/chat', {
+      const res = await axios.post(`${import.meta.env.VITE_BACKEND_URL}/chat`, {
         user_id: userId,
         message: finalInput
       });
@@ -73,7 +73,7 @@ function ChatBox({ selectedHistory }) {
     setMessages([]);
     setInput('');
     try {
-      await axios.post(`http://localhost:8000/start_session/${userId}`);
+      await axios.post(`${import.meta.env.VITE_BACKEND_URL}/start_session/${userId}`);
     } catch (err) {
       console.error("Failed to reset session:", err);
     }

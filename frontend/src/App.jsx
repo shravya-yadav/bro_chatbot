@@ -20,7 +20,7 @@ function App() {
   useEffect(() => {
     const fetchHistory = async () => {
       try {
-        const res = await axios.get('http://localhost:8000/get_history/user123');
+        const res = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/get_history/user123`);
         const prompts = res.data.map(item => item.prompt);
         setHistory(prompts);
       } catch (err) {
