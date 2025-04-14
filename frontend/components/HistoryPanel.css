@@ -1,0 +1,6 @@
+.history-panel {
+    width: 25%;
+    background-color: #3d50e0;
+    padding: 20px;
+    overflow-y: auto;
+  }
