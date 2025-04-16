@@ -1,0 +1,72 @@
+/* AuthForm.css */
+.auth-container {
+    min-height: 100vh;
+    background: linear-gradient(to bottom right, #e0f2fe, #c7d2fe);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+  }
+  
+  .auth-container > div {
+    background-color: #fff;
+    padding: 2.5rem;
+    border-radius: 1.5rem;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    width: 100%;
+    max-width: 400px;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+  
+  .auth-container h2 {
+    text-align: center;
+    font-size: 2rem;
+    font-weight: 700;
+    color: #4f46e5;
+    margin-bottom: 1rem;
+  }
+  
+  .auth-container input {
+    padding: 0.75rem 1rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.75rem;
+    font-size: 1rem;
+    transition: border-color 0.2s ease;
+  }
+  
+  .auth-container input:focus {
+    outline: none;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 2px #e0e7ff;
+  }
+  
+  .auth-container button {
+    padding: 0.75rem 1rem;
+    background-color: #4f46e5;
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 0.75rem;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+  }
+  
+  .auth-container button:hover {
+    background-color: #4338ca;
+  }
+  
+  .auth-container p {
+    text-align: center;
+    font-size: 0.875rem;
+    color: #6b7280;
+    cursor: pointer;
+  }
+  
+  .auth-container p:hover {
+    text-decoration: underline;
+    color: #4f46e5;
+  }
+  

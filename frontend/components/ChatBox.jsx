@@ -4,19 +4,41 @@ import { formatGeminiResponse } from '../src/utils/formatGeminiResponse.jsx';
 import HistoryPanel from './HistoryPanel';
 import './ChatBox.css';
 
-// Normalize backend URL to avoid double slashes
 const BASE_URL = import.meta.env.VITE_BACKEND_URL.replace(/\/$/, '');
-console.log("Using backend URL:", BASE_URL);
 
-function ChatBox({ selectedHistory }) {
+function ChatBox({ selectedHistory, onSendQuery, user }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [history, setHistory] = useState([]);
   const messagesEndRef = useRef(null);
 
-  const userId = 'user123';
+  const userId = user.user_id;
 
+  // Fetch saved history on mount
+  useEffect(() => {
+    const fetchChatHistory = async () => {
+      try {
+        const res = await axios.get(`${BASE_URL}/get_history/${userId}`);
+        const historyData = res.data;
+
+        const formattedMessages = historyData.flatMap(item => ([
+          { sender: 'user', text: item.query },
+          { sender: 'bot', text: item.response }
+        ]));
+
+        setMessages(formattedMessages);
+        const prompts = historyData.map(item => extractPrompt(item.query));
+        setHistory(prompts);
+      } catch (err) {
+        console.error("Error loading chat history:", err);
+      }
+    };
+
+    fetchChatHistory();
+  }, [userId]);
+
+  // Handle query from selected past item
   useEffect(() => {
     if (selectedHistory) {
       setInput(selectedHistory);
@@ -37,38 +59,48 @@ function ChatBox({ selectedHistory }) {
     return periodIndex !== -1 ? text.substring(0, periodIndex + 1).trim() : text.trim();
   };
 
+  const buildContextFromHistory = (messages) => {
+    const recent = messages.slice(-6); // last 3 exchanges
+    return recent.map(msg => `${msg.sender === 'user' ? 'You' : 'BRO'}: ${msg.text}`).join('\n');
+  };
+
   const sendMessage = async (customInput = null) => {
     const finalInput = customInput || input;
     if (!finalInput.trim()) return;
 
-    const userMsg = { sender: 'You', text: finalInput };
+    const userMsg = { sender: 'user', text: finalInput };
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setLoading(true);
 
     const prompt = extractPrompt(finalInput);
-    setHistory(prev => (prev.includes(prompt) ? prev : [...prev, prompt]));
+    onSendQuery(prompt);
 
-    try {
-      await axios.post(`${BASE_URL}/save_history`, {
-        user_id: userId,
-        query: prompt,
-        response: ''
-      });
-    } catch (err) {
-      console.error("Failed to save history:", err);
-    }
+    const historyContext = buildContextFromHistory(messages);
 
     try {
       const res = await axios.post(`${BASE_URL}/chat`, {
         user_id: userId,
-        message: finalInput
+        message: `${historyContext}\n${finalInput}` // <- no extra "You:"
       });
 
-      const aiMsg = { sender: 'BRO', text: res.data.response };
+      const responseText = res.data.response;
+      const aiMsg = { sender: 'bot', text: responseText };
       setMessages(prev => [...prev, aiMsg]);
+
+      // Save query and response
+      await axios.post(`${BASE_URL}/save_history`, {
+        user_id: userId,
+        query: prompt,
+        response: responseText
+      });
+
+      // Refresh prompt list for HistoryPanel
+      const updatedHistRes = await axios.get(`${BASE_URL}/get_history/${userId}`);
+      const updatedPrompts = updatedHistRes.data.map(item => extractPrompt(item.query));
+      setHistory(updatedPrompts);
     } catch (error) {
-      console.error(error);
+      console.error("Chat error:", error);
     }
 
     setLoading(false);
@@ -93,16 +125,16 @@ function ChatBox({ selectedHistory }) {
       <div className="chat-container">
         <div className="chat-section">
           <div className="chat-header">
-            <h3>🤖 Chat with <span className="bro-text">BRO</span></h3>
+            <h3>Hi {user.username} 👋 — Chat with <span className="bro-text">BRO</span></h3>
             <button onClick={resetChat}>Clear Chat</button>
           </div>
 
           <div className="chat-messages">
             {messages.map((msg, idx) => (
-              <div key={idx} className={`msg ${msg.sender === 'You' ? 'you' : 'bot'}`}>
+              <div key={idx} className={`msg ${msg.sender}`}>
                 <div>
-                  <strong>{msg.sender}:</strong>
-                  <div>{msg.sender === 'BRO' ? formatGeminiResponse(msg.text) : msg.text}</div>
+                  <strong>{msg.sender === 'bot' ? 'BRO' : 'You'}:</strong>
+                  <div>{msg.sender === 'bot' ? formatGeminiResponse(msg.text) : msg.text}</div>
                 </div>
               </div>
             ))}
@@ -122,7 +154,6 @@ function ChatBox({ selectedHistory }) {
           </div>
         </div>
 
-        {/* History panel component */}
         <HistoryPanel history={history} onSelect={sendMessage} />
       </div>
     </div>

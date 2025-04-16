@@ -1,53 +1,26 @@
 import os
+import uuid
 import requests
+import json
 import google.generativeai as genai
 from fastapi import FastAPI
 from pydantic import BaseModel
 from pinecone import Pinecone, ServerlessSpec
 from fastapi.middleware.cors import CORSMiddleware
+from auth import router as auth_router
 
+# ---------- Config ----------
 genai.configure(api_key="AIzaSyA62GAHTjnfqI602xCxTzNEnW4k6uQ-LOw")
 model = genai.GenerativeModel("gemini-1.5-flash-latest")
 
 pc = Pinecone(api_key="pcsk_5JQvGu_Sexw9S6kQvcq5QuPXkETxKp7dTgWfhaKUgxKoNfyJHU1xWAgoTpvSNQLzhQg1Qo")
 index_name = "genai-intel-chat"
-# if index_name not in pc.list_indexes():
-#     pc.create_index(
-#         name=index_name,
-#         dimension=768,
-#         metric="cosine",
-#         spec=ServerlessSpec(cloud="aws", region="us-east-1")
-#     )
 index = pc.Index(index_name)
 
 SERPER_API_KEY = "0da379d2affd1fc587d4a472d84265c5f438a83f"
 
 app = FastAPI()
-
-# Dummy history store (use DB or file in real project)
-user_histories = {}
-
-# Define the request schema for saving history
-class HistoryEntry(BaseModel):
-    user_id: str
-    query: str
-    response: str
-
-# ✅ Add this route to save history
-@app.post("/save_history")
-async def save_history(entry: HistoryEntry):
-    history = user_histories.get(entry.user_id, [])
-    history.append({
-        "query": entry.query,
-        "response": entry.response
-    })
-    user_histories[entry.user_id] = history
-    return {"status": "saved"}
-
-# ✅ Add this route to get history
-@app.get("/get_history/{user_id}")
-async def get_history(user_id: str):
-    return user_histories.get(user_id, [])
+app.include_router(auth_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -57,12 +30,60 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---------- Schema ----------
+# ---------- In-Memory Store ----------
+user_histories = {}
+if os.path.exists("chat_history.json"):
+    with open("chat_history.json", "r") as f:
+        user_histories = json.load(f)
+
+# ---------- Schemas ----------
 class ChatRequest(BaseModel):
     user_id: str
     message: str
 
-# ---------- Embedding & Memory ----------
+class HistoryEntry(BaseModel):
+    user_id: str
+    query: str
+    response: str
+
+# ---------- History Endpoints ----------
+@app.post("/save_history")
+async def save_history(entry: HistoryEntry):
+    history = user_histories.get(entry.user_id, [])
+    history.append({"query": entry.query, "response": entry.response})
+    user_histories[entry.user_id] = history
+    with open("chat_history.json", "w") as f:
+        json.dump(user_histories, f)
+    return {"status": "saved"}
+
+def find_existing_response(user_id: str, query: str):
+    history = user_histories.get(user_id, [])
+    for item in history:
+        if item["query"].strip().lower() == query.strip().lower():
+            return item["response"]
+    return None
+
+@app.get("/get_history/{user_id}")
+async def get_history(user_id: str):
+    return user_histories.get(user_id, [])
+
+@app.get("/history/{user_id}")
+def get_user_history(user_id: str):
+    try:
+        query_res = index.query(
+            vector=[0.0] * 768,
+            top_k=20,
+            include_metadata=True,
+            filter={"user_id": {"$eq": user_id}}
+        )
+        return {
+            "history": [match["metadata"]["content"] for match in query_res.get("matches", [])]
+        }
+    except Exception as e:
+        print(f"[ERROR] History fetch failed: {e}")
+        return {"history": []}
+
+# ---------- Embedding + Memory ----------
 def get_embedding(text):
     try:
         res = genai.embed_content(
@@ -80,7 +101,7 @@ def store_memory(user_id: str, topic: str, full_message: str, category: str = "g
     if vector:
         try:
             index.upsert(vectors=[{
-                "id": f"{user_id}:{topic}:{category}:{hash(full_message)}",
+                "id": str(uuid.uuid4()),
                 "values": vector,
                 "metadata": {
                     "user_id": user_id,
@@ -92,22 +113,33 @@ def store_memory(user_id: str, topic: str, full_message: str, category: str = "g
         except Exception as e:
             print(f"[ERROR] Memory store failed: {e}")
 
-def retrieve_memory(user_id: str, query: str, top_k: int = 3):
-    vector = get_embedding(query)
-    if vector:
-        try:
-            result = index.query(
-                vector=vector,
-                top_k=top_k,
-                include_metadata=True,
-                filter={"user_id": {"$eq": user_id}}
-            )
-            return [match["metadata"]["content"] for match in result.get("matches", [])]
-        except Exception as e:
-            print(f"[ERROR] Memory retrieve failed: {e}")
-    return []
+def retrieve_memory(user_id: str, query: str, top_k: int = 5):
+    try:
+        query_vector = get_embedding(query)
+        if not query_vector:
+            return []
 
-# ---------- Session Initialization ----------
+        results = index.query(
+            vector=query_vector,
+            top_k=top_k,
+            include_metadata=True,
+            filter={"user_id": user_id}
+        )
+
+        memory_chunks = []
+        for match in results.matches:
+            score = match.score
+            content = match.metadata.get("content", "")
+            if score > 0.75:
+                memory_chunks.append(content)
+
+        return memory_chunks
+
+    except Exception as e:
+        print(f"[ERROR] retrieve_memory failed: {e}")
+        return []
+
+# ---------- Chat Session Memory ----------
 @app.get("/start_session/{user_id}")
 def start_session(user_id: str):
     try:
@@ -127,7 +159,7 @@ def start_session(user_id: str):
         print(f"[ERROR] Session load failed: {e}")
         return {"session_memory": {}}
 
-# ---------- News ----------
+# ---------- News & Web ----------
 def fetch_news(company):
     headers = {"X-API-KEY": SERPER_API_KEY, "Content-Type": "application/json"}
     payload = {"q": company}
@@ -150,7 +182,6 @@ def summarize_news(news_items):
         print(f"[ERROR] News summary failed: {e}")
         return "Error summarizing news."
 
-# ---------- Web Search ----------
 def fetch_web(query):
     headers = {"X-API-KEY": SERPER_API_KEY, "Content-Type": "application/json"}
     payload = {"q": query}
@@ -173,7 +204,7 @@ def summarize_web_results(results):
         print(f"[ERROR] Web summarization failed: {e}")
         return "Unable to summarize web results."
 
-# ---------- Market Comparison ----------
+# ---------- Comparison ----------
 def compare_market(company, competitors):
     prompt = f"Compare {company} with {', '.join(competitors)} in terms of market share and strategy."
     try:
@@ -189,59 +220,48 @@ async def chat(req: ChatRequest):
     msg = req.message
 
     try:
-        # News Handling
         if "news" in msg.lower() or "latest" in msg.lower():
             target = msg.split("about")[-1].strip() if "about" in msg else msg
             news = fetch_news(target)
             summary = summarize_news(news)
             final_response = f"Here’s the latest news about **{target}**:\n\n{summary}"
-            store_memory(uid, target, final_response, category="source")
+            store_memory(uid, topic=target, full_message=summary, category="source")
             return {"response": final_response}
 
-        # Web Search with Source Citation
         elif "web" in msg.lower() or "search" in msg.lower():
             results = fetch_web(msg)
             summary = summarize_web_results(results)
-            store_memory(uid, "web_search", summary, category="source")
+            store_memory(uid, topic="web_search", full_message=summary, category="source")
             return {"response": summary}
 
-        # Market Comparison
         elif "compare" in msg.lower():
             parts = msg.lower().split("compare")[-1].strip().split("with")
             company = parts[0].strip()
             competitors = [c.strip() for c in parts[1].split("and")]
             result = compare_market(company, competitors)
             final_response = f"Market Comparison between **{company}** and **{', '.join(competitors)}**:\n\n{result}"
-            store_memory(uid, "comparison", final_response, category="preference")
+            store_memory(uid, topic="comparison", full_message=result, category="preference")
             return {"response": final_response}
 
-        # General Chat with Memory
-        memory = retrieve_memory(uid, msg)
-        prompt = f"Context:\n{chr(10).join(memory)}\n\nUser Query:\n{msg}"
-        response = model.generate_content(prompt).text
-        store_memory(uid, "general_chat", response, category="faq")
+        # Check for repeated query
+        existing = find_existing_response(uid, msg)
+        if existing:
+            return {"response": existing}
+
+        # Fresh Gemini response
+        response = model.generate_content(msg).text
+
+        # Save only new responses to memory and JSON
+        store_memory(uid, topic="general_chat", full_message=response, category="faq")
+        user_histories.setdefault(uid, []).append({"query": msg, "response": response})
+        with open("chat_history.json", "w") as f:
+            json.dump(user_histories, f)
+
         return {"response": response}
 
     except Exception as e:
         print(f"[ERROR] Chat handling failed: {e}")
         return {"response": "Oops! Something went wrong."}
-
-# ---------- History ----------
-@app.get("/history/{user_id}")
-def get_user_history(user_id: str):
-    try:
-        query_res = index.query(
-            vector=[0.0] * 768,
-            top_k=20,
-            include_metadata=True,
-            filter={"user_id": {"$eq": user_id}}
-        )
-        return {
-            "history": [match["metadata"]["content"] for match in query_res.get("matches", [])]
-        }
-    except Exception as e:
-        print(f"[ERROR] History fetch failed: {e}")
-        return {"history": []}
 
 @app.get("/")
 def home():

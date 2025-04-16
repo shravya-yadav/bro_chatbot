@@ -72,14 +72,15 @@
   
   /* Chat messages */
   .chat-messages {
-    flex-grow: 1;
+    background-color: #1e1e2f;
+    color: #fff;
+    padding: 20px;
     overflow-y: auto;
-    margin-bottom: 15px;
+    height: 70vh;
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    min-height: 0;
   }
+  
   
   .msg {
     width: 100%;
@@ -88,8 +89,15 @@
   }
   
   .msg.you {
-    justify-content: flex-end;
+    background-color: #333;
+    color: #fff;
+    border-radius: 12px;
+    padding: 10px;
+    margin: 6px 0;
+    max-width: 80%;
+    align-self: flex-end;
   }
+  
   
   .msg.bot {
     display: inline-block;
